@@ -34,6 +34,7 @@ export function convergence(samples,s) {
   const stable=sameBest&&samePV&&winrateRange<=s.winrateTolerance&&scoreRange<=s.scoreTolerance&&maxPolicyTV<=s.policyTVTolerance&&ownershipMaxDelta<=s.ownershipTolerance;
   return {...result,stable,reason:stable?'observed-stability':'changing',sameBest,samePV,winrateRange,scoreRange,maxPolicyTV,ownershipMaxDelta};
 }
+export function verifyFinal(samples,s){const final=samples.at(-1);if(!final)return {stable:false,reason:'no-final'};const prior=samples.filter(x=>!x.forcedFinal&&x.actualRootVisits<final.actualRootVisits);return convergence([...prior,{...final,forcedFinal:false}],s);}
 export async function sha256(bytes){return [...new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))].map(x=>x.toString(16).padStart(2,'0')).join('');}
 export const plain = value => JSON.parse(JSON.stringify(value,(_,v)=>ArrayBuffer.isView(v)?Array.from(v):v));
 export function parseSGF(text) {

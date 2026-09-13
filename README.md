@@ -34,6 +34,8 @@
 
 保存稳定窗口起点和检测时 Visits、首次观察稳定结果、停止原因、真实最终 Visits、耗时和全部轨迹。稳定窗口起点是估计区间下界，检测点才是获得该证据时的计算量。**稳定不证明结论正确**，也不是统计置信保证；多次运行、不同教师、不同阈值仍可能给出不同结果。时间/Visits 用尽和手动停止不自动视作稳定。最终快照在停止线程后获取，不用最后一次缓存帧冒充最终状态。
 
+运行时采样属于非原子 live-tree 观察（`snapshotConsistency`），各统计读取期间搜索仍可能推进；`ownershipAtVisits` 是本次采样开始时的 Visits。停止后的最终快照为 stopped-tree。多线程在途访问可能使最终 Visits 略超上限，例如 128 的预算实际产生 131 Visits；始终保存真实值。自动停止后重新检查最终快照，如果结论反转，标记 `stability-unconfirmed-at-stop`。另保存引擎耗时、NN rows / batches（含搜索前一次原始评估）；每条记录重建搜索对象并清空 NN 缓存，固定初始搜索种子 `kgr-research-v1`，但多线程执行不保证逐位可复现。
+
 ## 教师数据内容
 
 每条 `katago-teacher/1.0` JSON 独立包含：
@@ -77,6 +79,8 @@ npm run serve
 GitHub Pages 设置选择 **GitHub Actions**。推送 main 自动运行测试、编译 WASM、校验文件并部署 `site/`。GitHub 只托管静态文件，编译依赖从网络下载；运行中 SGF、模型和数据不离开本机。
 
 本地单元测试覆盖 SGF 变化与摆子、捕获/禁着、自杀、坐标、非法棋谱、收敛窗口、对称候选去重和预算校验。真实 WebGPU 端到端验证另行记录，不能把单元测试视为大型教师加载/棋力验证。
+
+`npm run test:engine` 实际实例化编译后的 pthread WASM 并检查研究 ABI 和安全空状态；完整搜索需在浏览器 Worker 中验证（Node 的 Asyncify/pthreads 不适合实际搜索）。浏览器验证记录见 [TESTING.md](TESTING.md)。
 
 ## 数据持久性
 

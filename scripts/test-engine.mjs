@@ -1,0 +1,10 @@
+import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {createRequire} from 'node:module';import assert from 'node:assert/strict';
+const dir=fs.mkdtempSync(path.join(os.tmpdir(),'katago-abi-'));
+const js=path.join(dir,'kataeval-mt.cjs');fs.copyFileSync('site/engine/kataeval-mt.js',js);
+const require=createRequire(import.meta.url),factory=require(js);
+const M=await factory({wasmBinary:fs.readFileSync('site/engine/kataeval-mt.wasm'),mainScriptUrlOrBlob:js});
+for(const name of ['kgrConfigure','kgrPoll','kgrFinish','kgeLoad','kgeEvalSeqKata','kgeSearchBegin','kgeStopSearch','kgeBackendIsGpu'])assert.equal(typeof M['_'+name],'function',name);
+assert.deepEqual(JSON.parse(M.ccall('kgrPoll','string',[],[])),{done:true,frames:[]});
+assert.equal(M.ccall('kgrFinish','number',[],[]),0);
+console.log('PASS: compiled threaded WASM runtime, research exports, empty queue, null finalization');
+process.exit(0);

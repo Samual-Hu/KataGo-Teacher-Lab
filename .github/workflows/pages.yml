@@ -33,6 +33,7 @@ jobs:
           "$HOME/emsdk/emsdk" activate 6.0.1
           bash scripts/build-engine.sh
       - run: npm run build
+      - run: npm run test:engine
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site

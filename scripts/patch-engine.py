@@ -26,6 +26,7 @@ s = s[:start] + '''  if(researchSetup.size() == (size_t)(gXLen*gYLen))
   }''' + s[end:]
 # Each dataset record starts from a fresh search tree. Within a record there is ONE search.
 s = s.replace('if(gBot->getSearch()->getRootNode() != NULL && common == gBotLine.size())', 'if(false)')
+s = s.replace('"kge-search"', '"kgr-research-v1"')
 s = s.replace('static void analyzeCb(const Search* s) noexcept { writeSnapshot(s); }', '''static std::mutex researchMutex;
 static std::vector<nlohmann::json> researchFrames;
 static std::string researchError;
@@ -33,6 +34,7 @@ static int researchFirst = 64, researchPV = 64;
 static double researchGrowth = 1.5;
 static int64_t researchNext = 64;
 static bool researchMovesOwnership = true;
+static std::chrono::steady_clock::time_point researchStarted;
 static void researchSnapshot(const Search* s, bool force) noexcept {
   try {
     ReportedSearchValues v;
@@ -44,6 +46,19 @@ static void researchSnapshot(const Search* s, bool force) noexcept {
     j["rootValue"] = {{"whiteWin",v.winValue},{"whiteLoss",v.lossValue},{"noResult",v.noResultValue},
       {"utility",v.utility},{"scoreMean",v.expectedScore},{"scoreLead",v.lead},{"scoreStdev",v.expectedScoreStdev}};
     j["ownershipAtVisits"] = v.visits;
+    j["snapshotConsistency"] = force ? "stopped-tree" : "live-tree-non-atomic";
+    j["engineElapsedMs"] = std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-researchStarted).count();
+    j["nnRowsProcessed"] = gNNEval->numRowsProcessed();
+    j["nnBatchesProcessed"] = gNNEval->numBatchesProcessed();
+    std::vector<AnalysisData> extra;
+    s->getAnalysisData(extra, 0, false, researchPV, true);
+    for(auto& m : j["moveInfos"]) for(const auto& a : extra)
+      if(m["move"] == Location::toString(a.move, s->rootBoard)) {
+        m["trainingStatsWhite"] = {{"ess",a.ess},{"radius",a.radius},{"weightFactor",a.weightFactor},
+          {"weightSqSum",a.weightSqSum},{"utilitySqAvg",a.utilitySqAvg},{"scoreMeanSqAvg",a.scoreMeanSqAvg},
+          {"resultUtility",a.resultUtility},{"scoreUtility",a.scoreUtility},{"winLossValue",a.winLossValue}};
+        break;
+      }
     j["searchParams"] = s->searchParams.changeableParametersToJson();
     std::ostringstream params; s->searchParams.printParams(params); j["searchParamsText"] = params.str();
     j["perspective"] = "white";
@@ -57,6 +72,14 @@ static void researchSnapshot(const Search* s, bool force) noexcept {
 static void analyzeCb(const Search* s) noexcept { researchSnapshot(s, false); }
 KATAEVAL_EXPORT int kgrConfigure(const int* stones, int initialPla, int first, double growth, int pv, int moveOwnership) {
   stopPonder();
+  if(gNNEval) {
+    delete gBot;
+    gBot = new AsyncBot(SearchParams::basicDecentParams(), gNNEval, NULL, &kgeLogger(), "kgr-research-v1");
+    gBot->setAlwaysIncludeOwnerMap(true);
+    gNNEval->clearStats();
+    gNNEval->clearCache();
+  }
+  researchStarted = std::chrono::steady_clock::now();
   researchSetup.assign(stones, stones + gXLen*gYLen); researchInitialPla = initialPla;
   researchFirst = std::max(1, first); researchNext = researchFirst;
   researchGrowth = std::max(1.1, growth); researchPV = std::max(1, std::min(256, pv));

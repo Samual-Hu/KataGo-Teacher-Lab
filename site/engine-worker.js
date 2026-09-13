@@ -15,14 +15,17 @@ async function init(req){
   const adapterInfo=adapter.info?{vendor:adapter.info.vendor,architecture:adapter.info.architecture,device:adapter.info.device,description:adapter.info.description}:null;
   tell('status',{message:'校验教师权重 SHA-256…'});
   const hash=await core.sha256(req.bytes);
-  const decoded=req.name.endsWith('.gz')?new Blob([req.bytes]).stream().pipeThrough(new DecompressionStream('gzip')):new Blob([req.bytes]).stream();
+  const suffix=req.name.toLowerCase().match(/(\.bin\.gz|\.txt\.gz|\.bin|\.txt|\.gz)$/)?.[0];
+  if(!suffix)throw Error('请选择 KataGo .bin/.txt 或 gzip 权重');
+  const modelPath='/teacher'+suffix;
+  const decoded=suffix.endsWith('.gz')?new Blob([req.bytes]).stream().pipeThrough(new DecompressionStream('gzip')):new Blob([req.bytes]).stream();
   const reader=decoded.getReader();let header='';while(header.split('\n').length<3&&header.length<4096){const r=await reader.read();if(r.done)break;header+=new TextDecoder().decode(r.value.slice(0,4096));}await reader.cancel();
   const modelName=header.split('\n')[0].trim();
   tell('status',{message:'加载 KataGo WASM 与本地 GPU 权重…'});
   importScripts('./engine/kataeval-mt.js');
   M=await createKata({mainScriptUrlOrBlob:new URL('./engine/kataeval-mt.js',self.location.href).href,locateFile:p=>new URL('./engine/'+p,self.location.href).href,print:()=>{},printErr:s=>tell('diagnostic',{message:s}),onAbort:s=>fail(Error('WASM 中止：'+s))});
-  M.FS.writeFile('/teacher.bin.gz',new Uint8Array(req.bytes));
-  check(await call('kgeLoad',['/teacher.bin.gz',size],['string','number'],true));
+  M.FS.writeFile(modelPath,new Uint8Array(req.bytes));
+  check(await call('kgeLoad',[modelPath,size],['string','number'],true));
   // Keep MEMFS bytes: the threaded NNEvaluator opens this path on first evaluation.
   if(!call('kgeBackendIsGpu'))throw Error('引擎退回 CPU；本研究模式要求 WebGPU，未开始分析');
   ready=true;tell('ready',{model:{fileName:req.name,name:modelName,sha256:hash,hashScope:'original-file-bytes',byteLength:req.bytes.byteLength,modelVersion:call('kgeModelVersion'),backend:'WebGPU',precision:'fp32',adapter:adapterInfo}});
@@ -37,6 +40,7 @@ async function analyze(req){
     check(call('kgrConfigure',[setup,p.initialPla,s.firstVisits,s.growth,s.pvLength,s.moveOwnership?1:0]));
     const b=ptr(Array(size*size).fill(0)),policy=ptr(Array(size*size+1).fill(0)),value=ptr(Array(5).fill(0)),own=ptr(Array(size*size).fill(0));
     check(await call('kgeEvalSeqKata',[ml,mc,p.moves.length,p.toPlay,p.komi,b,policy,value,own],undefined,true));
+    if(!call('kgeBackendIsGpu'))throw Error('搜索后端未使用 WebGPU，已拒绝生成教师数据');
     const read=(ptr,n,heap=M.HEAPF32)=>Array.from(heap.slice(ptr>>2,(ptr>>2)+n));
     const actual=read(b,size*size,M.HEAP32);if(JSON.stringify(actual)!==JSON.stringify(p.board))throw Error('引擎重放棋盘与界面不一致，已拒绝生成数据');
     tell('raw',{raw:{board:actual,policy:read(policy,size*size+1),value:read(value,5),ownership:read(own,size*size),perspective:'white',valueFields:['whiteWinProb','whiteLossProb','noResultProb','whiteScoreMean','whiteLead']}});
@@ -45,7 +49,10 @@ async function analyze(req){
       for(const f of result.frames){f.elapsedMs=Math.round(performance.now()-started);frames.push(f);lastDecision=core.convergence(frames,s);if(lastDecision.stable&&!firstStable)firstStable=lastDecision;tell('snapshot',{snapshot:f,convergence:lastDecision});}return result.done;}
     while(true){await wait(80);const done=drain();if(stopReason||done||(s.autoStop&&lastDecision?.stable)){if(!stopReason)stopReason=lastDecision?.stable&&s.autoStop?'observed-stability':done?'budget-exhausted':'unknown';break;}}
     check(call('kgrFinish'));drain();
-    tell('complete',{reason:stopReason,actualVisits:frames.at(-1)?.actualRootVisits??0,elapsedMs:Math.round(performance.now()-started),convergence:lastDecision,firstObservedStable:firstStable});
+    const finalVerification=core.verifyFinal(frames,s);
+    if(stopReason==='observed-stability'&&!finalVerification.stable)stopReason='stability-unconfirmed-at-stop';
+    const actualVisits=frames.at(-1)?.actualRootVisits??0;
+    tell('complete',{reason:stopReason,budgetLimit:stopReason==='budget-exhausted'?(actualVisits>=s.maxVisits?'visits':'time'):null,actualVisits,elapsedMs:Math.round(performance.now()-started),convergence:lastDecision,finalVerification,firstObservedStable:firstStable});
   }finally{try{call('kgeStopSearch');}catch{}for(const p of allocated)M._free(p);running=false;}
 }
 onmessage=e=>{const r=e.data;if(r.type==='stop'){stopReason='manual-stop';return;}chain=chain.then(()=>r.type==='init'?init(r):r.type==='analyze'?analyze(r):Promise.reject(Error('未知请求'))).catch(fail);};
