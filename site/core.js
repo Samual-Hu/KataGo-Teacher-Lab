@@ -37,6 +37,21 @@ export function convergence(samples,s) {
 export function verifyFinal(samples,s){const final=samples.at(-1);if(!final)return {stable:false,reason:'no-final'};const prior=samples.filter(x=>!x.forcedFinal&&x.actualRootVisits<final.actualRootVisits);return convergence([...prior,{...final,forcedFinal:false}],s);}
 export async function sha256(bytes){return [...new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))].map(x=>x.toString(16).padStart(2,'0')).join('');}
 export const plain = value => JSON.parse(JSON.stringify(value,(_,v)=>ArrayBuffer.isView(v)?Array.from(v):v));
+export function validateSnapshot(f,n){
+  if(!Number.isInteger(f.actualRootVisits)||f.actualRootVisits<1||!f.rootInfo||!f.rootValue||!Array.isArray(f.moveInfos))throw Error('缺少完整搜索统计');
+  for(const k of ['winrate','scoreLead','scoreStdev'])if(!Number.isFinite(f.rootInfo[k]))throw Error('搜索统计出现非有限值');
+  for(const [k,len] of [['policy',n*n+1],['ownership',n*n],['ownershipStdev',n*n]])if(!Array.isArray(f[k])||f[k].length!==len||f[k].some(v=>!Number.isFinite(v)))throw Error(`${k} 维度或数值无效`);
+  for(const m of f.moveInfos){if(typeof m.move!=='string'||!Number.isFinite(m.visits)||!Number.isFinite(m.prior)||!Number.isFinite(m.winrate)||!Number.isFinite(m.scoreLead)||!Array.isArray(m.pv))throw Error('候选着统计不完整');point(m.move,n);}
+  return f;
+}
+export function parseDataset(text){let parsed;try{const p=JSON.parse(text);parsed=Array.isArray(p)?p:[p];}catch{parsed=text.split(/\r?\n/).filter(x=>x.trim()).map(x=>JSON.parse(x));}
+  for(const r of parsed){const n=r.position?.size;if(r.schema!==SCHEMA||typeof r.id!=='string'||typeof r.teacher?.name!=='string'||! /^[a-f0-9]{64}$/.test(r.teacher?.sha256??'')||!Array.isArray(r.snapshots)||!r.settings||![9,13,19].includes(n))throw Error('不兼容或缺少来源信息的记录');
+    for(const k of ['board','setup'])if(!Array.isArray(r.position[k])||r.position[k].length!==n*n||r.position[k].some(x=>![0,1,2].includes(x)))throw Error('局面棋盘无效');
+    if(!Array.isArray(r.position.moves)||!Number.isFinite(r.position.komi)||![1,2].includes(r.position.toPlay)||![1,2].includes(r.position.initialPla)||typeof r.createdAt!=='string')throw Error('局面历史或日期无效');
+    for(const f of r.snapshots)validateSnapshot(f,n);
+  }return parsed;
+}
+export const serializeDataset = records => records.map(r=>JSON.stringify(r)).join('\n')+(records.length?'\n':'');
 export function parseSGF(text) {
   let i=0, id=0; const nodes=[];
   const ws=()=>{while(/\s/.test(text[i]??'')&&i<text.length)i++;};

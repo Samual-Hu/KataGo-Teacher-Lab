@@ -46,9 +46,10 @@ async function analyze(req){
     tell('raw',{raw:{board:actual,policy:read(policy,size*size+1),value:read(value,5),ownership:read(own,size*size),perspective:'white',valueFields:['whiteWinProb','whiteLossProb','noResultProb','whiteScoreMean','whiteLead']}});
     check(await call('kgeSearchBegin',[ml,mc,p.moves.length,p.toPlay,p.komi,s.maxVisits,s.maxTimeSec*1000,s.threads],undefined,true));
     function drain(){const result=JSON.parse(M.ccall('kgrPoll','string',[],[]));if(result.snapshotError)throw Error(result.snapshotError);
-      for(const f of result.frames){f.elapsedMs=Math.round(performance.now()-started);frames.push(f);lastDecision=core.convergence(frames,s);if(lastDecision.stable&&!firstStable)firstStable=lastDecision;tell('snapshot',{snapshot:f,convergence:lastDecision});}return result.done;}
+      for(const f of result.frames){core.validateSnapshot(f,size);f.elapsedMs=Math.round(performance.now()-started);frames.push(f);lastDecision=core.convergence(frames,s);if(lastDecision.stable&&!firstStable)firstStable=lastDecision;tell('snapshot',{snapshot:f,convergence:lastDecision});}return result.done;}
     while(true){await wait(80);const done=drain();if(stopReason||done||(s.autoStop&&lastDecision?.stable)){if(!stopReason)stopReason=lastDecision?.stable&&s.autoStop?'observed-stability':done?'budget-exhausted':'unknown';break;}}
     check(call('kgrFinish'));drain();
+    if(!frames.length||!frames.at(-1).forcedFinal)throw Error('未取得最终完整快照，不能标记为完成');
     const finalVerification=core.verifyFinal(frames,s);
     if(stopReason==='observed-stability'&&!finalVerification.stable)stopReason='stability-unconfirmed-at-stop';
     const actualVisits=frames.at(-1)?.actualRootVisits??0;

@@ -2,7 +2,7 @@
 
 2026-09-13，Windows 本机 Chromium / WebGPU。
 
-- `npm test`：11 项通过，覆盖 SGF、规则、收敛、候选去重与最终反转。
+- `npm test`：14 项通过，覆盖 SGF、规则、收敛、候选去重与最终反转、数据集 JSONL 往返和损坏记录拒绝。
 - GitHub Actions：Emscripten 6.0.1 完整 WASM 编译成功，Pages 静态文件构建和发布成功。
 - `npm run test:engine`：实例化真实 512MB pthread WASM、检查研究 ABI、空队列和无引擎结束请求，通过。
 - 浏览器导入 `tests/variation.sgf`：识别 7 节点、黑白摆子与两个变化分支；跳到节点 6 后保留 4 手历史，通过 C++ 棋盘一致性检查。
