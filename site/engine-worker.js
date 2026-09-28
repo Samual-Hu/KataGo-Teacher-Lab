@@ -43,7 +43,7 @@ async function init(req){
   check(await call('kgeLoad',[modelPath,size],['string','number'],true));
   // Keep MEMFS bytes: the threaded NNEvaluator opens this path on first evaluation.
   if(!call('kgeBackendIsGpu'))throw Error('引擎退回 CPU；本研究模式要求 WebGPU，未开始分析');
-  ready=true;tell('ready',{model:{fileName:req.name,name:modelName,sha256:hash,hashScope:'original-file-bytes',byteLength:req.bytes.byteLength,modelVersion:call('kgeModelVersion'),backend:'WebGPU',precision:'fp32',adapter:adapterInfo}});
+  ready=true;tell('ready',{model:{fileName:req.name,name:modelName,sha256:hash,hashScope:'original-file-bytes',byteLength:req.bytes.byteLength,boardSize:size,modelVersion:call('kgeModelVersion'),backend:'WebGPU',precision:'fp32',adapter:adapterInfo}});
 }
 async function analyze(req){
   if(!ready)throw Error('请先加载权重');if(running)throw Error('搜索仍在运行');
@@ -64,6 +64,7 @@ async function analyze(req){
     tell('raw',{raw:{board:actual,policy:read(policy,size*size+1),value:read(value,5),ownership:read(own,size*size),perspective:'white',valueFields:['whiteWinProb','whiteLossProb','noResultProb','whiteScoreMean','whiteLead']}});
     check(await call('kgeSearchBegin',[ml,mc,p.moves.length,p.toPlay,p.komi,s.maxVisits,s.maxTimeSec*1000,s.threads],undefined,true));
     function drain(){const result=JSON.parse(M.ccall('kgrPoll','string',[],[]));if(result.snapshotError)throw Error(result.snapshotError);
+      if(result.progress)tell('progress',{progress:result.progress});
       for(const f of result.frames){core.validateSnapshot(f,size);f.elapsedMs=Math.round(performance.now()-started);frames.push(f);lastDecision=core.convergence(frames,s);if(lastDecision.stable&&!firstStable)firstStable=lastDecision;tell('snapshot',{snapshot:f,convergence:lastDecision});}return result.done;}
     while(true){await wait(80);const done=drain();if(stopReason||done||(s.autoStop&&lastDecision?.stable)){if(!stopReason)stopReason=lastDecision?.stable&&s.autoStop?'observed-stability':done?'budget-exhausted':'unknown';break;}}
     check(call('kgrFinish'));drain();

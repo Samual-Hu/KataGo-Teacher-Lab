@@ -3,7 +3,7 @@ export const DEFAULTS = {maxVisits:100000, maxTimeSec:1800, threads:4, firstVisi
 export const coord = (i,n) => i < 0 ? 'pass' : 'ABCDEFGHJKLMNOPQRST'[i%n]+(n-Math.floor(i/n));
 export function point(s,n) {if(s==='pass')return -1; const x='ABCDEFGHJKLMNOPQRST'.indexOf(s[0]), y=n-Number(s.slice(1)); if(x<0||x>=n||y<0||y>=n)throw Error('坐标超出棋盘');return y*n+x;}
 export function validateSettings(s) {
-  for(const [k,a,b] of [['maxVisits',1,100000000],['maxTimeSec',1,86400],['threads',1,32],['firstVisits',1,1000000],['minVisits',1,100000000],['window',2,20],['pvLength',1,256],['pvPrefix',1,20]])
+  for(const [k,a,b] of [['maxVisits',1,100000000],['maxTimeSec',1,86400],['threads',1,64],['firstVisits',1,1000000],['minVisits',1,100000000],['window',2,20],['pvLength',1,256],['pvPrefix',1,20]])
     if(!Number.isInteger(s[k])||s[k]<a||s[k]>b)throw Error(`${k} 必须是 ${a}–${b} 之间的整数`);
   for(const [k,a,b] of [['growth',1.1,4],['winrateTolerance',0,1],['scoreTolerance',0,100],['policyTVTolerance',0,1],['ownershipTolerance',0,2]])
     if(!Number.isFinite(s[k])||s[k]<a||s[k]>b)throw Error(`${k} 超出范围`);

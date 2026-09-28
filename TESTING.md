@@ -41,3 +41,10 @@ Edge 页面测试：同一文件重复选择、9→19→9 尺寸切换后强制�
 学校电脑截图显示旧 Edge 页面及新 Chrome 页面配旧 Worker，说明 Pages 的脚本 / WASM 缓存可让同一次部署混用多个版本。页面、Worker、引擎 JS/WASM 和清单现使用同一修订参数；Service Worker 取资源时要求网络重新验证。界面环境徽章显示“修订 b”供核对。
 
 官方 9 路模型在 Intel gen-12lp / Chrome 的两次独立 8 线程搜索均达到 135 Visits（128 上限）；各有 8 个候选着、82 项 Policy、81 项 Ownership、有效 Value/PV，NN 行 / 批次为 135 / 35。第二次使用重新加载的模型，确认实际批量推理。
+
+
+## 修订 c：64 线程、实时 Visits、整盘自动保存
+
+官方 `kata9x9-b18c384nbt-20231025`（SHA-256 `a1298ce1adc1dad7bd868ca962b2384cc8388ed373a00e6bae1114fa6f9e2d61`）在 Windows / Intel gen-12lp / Chrome：64 线程连续两次搜索分别达到 190、191 实际 Visits，均有 68 个候选、82 项 Policy、81 项 Ownership、Value/PV；NN 行 / 批次约 193 / 14。搜索中产生 127 和 126 条低成本直播统计，第一次在 1 Visit 即可显示。8 线程页面测试在搜索尚未结束的 5 Visits 时显示了根 Visits 和候选着各自 Visits。
+
+短 SGF `(;SZ[9]KM[7.5];B[dd];W[ee])` 用官方权重逐步分析 3 个局面，选定目录逐局面写入 JSON，最后生成 `dataset.jsonl` 和 `run.json`；三条记录均有模型哈希、完整最终快照、82 项 Policy、81 项 Ownership，实际各 39 Visits。Edge 的浏览器下载模式自动保存了 2 局面的 JSONL。发布文件剔除了工作区中尚未提交的整盘 LLM 总结功能，另做独立回归。

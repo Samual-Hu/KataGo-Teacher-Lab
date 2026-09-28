@@ -30,16 +30,33 @@ s = s.replace('"kge-search"', '"kgr-research-v1"')
 s = s.replace('Logger logger(nullptr, false, false, false, false)', 'Logger logger(nullptr, false, true, false, false)')
 s = s.replace('static void analyzeCb(const Search* s) noexcept { writeSnapshot(s); }', '''static std::mutex researchMutex;
 static std::vector<nlohmann::json> researchFrames;
+static nlohmann::json researchLive;
 static std::string researchError;
 static int researchFirst = 64, researchPV = 64;
 static double researchGrowth = 1.5;
 static int64_t researchNext = 64;
 static bool researchMovesOwnership = true;
 static std::chrono::steady_clock::time_point researchStarted;
+static std::chrono::steady_clock::time_point researchLastProgress;
 static void researchSnapshot(const Search* s, bool force) noexcept {
   try {
     ReportedSearchValues v;
-    if(!s->getRootValues(v) || v.visits < 1 || (!force && v.visits < researchNext)) return;
+    if(!s->getRootValues(v) || v.visits < 1) return;
+    if(!force) {
+      auto now = std::chrono::steady_clock::now();
+      if(now - researchLastProgress >= std::chrono::milliseconds(150)) {
+        std::vector<AnalysisData> top;
+        s->getAnalysisData(top, 8, false, 1, false);
+        nlohmann::json live = {{"actualRootVisits",v.visits},{"moveInfos",nlohmann::json::array()}};
+        for(const auto& a : top) if(a.isSymmetryOf == Board::NULL_LOC)
+          live["moveInfos"].push_back({{"move",Location::toString(a.move,s->rootBoard)},
+                                        {"visits",a.numVisits},{"order",a.order}});
+        std::lock_guard<std::mutex> lock(researchMutex);
+        researchLive = std::move(live);
+        researchLastProgress = now;
+      }
+    }
+    if(!force && v.visits < researchNext) return;
     nlohmann::json j;
     if(!s->getAnalysisJson(P_WHITE, researchPV, false, true, true, true,
                           researchMovesOwnership, researchMovesOwnership, true, true, j)) return;
@@ -85,12 +102,13 @@ KATAEVAL_EXPORT int kgrConfigure(const int* stones, int initialPla, int first, d
   researchFirst = std::max(1, first); researchNext = researchFirst;
   researchGrowth = std::max(1.1, growth); researchPV = std::max(1, std::min(256, pv));
   researchMovesOwnership = moveOwnership != 0;
-  std::lock_guard<std::mutex> lock(researchMutex); researchFrames.clear(); researchError.clear(); return 1;
+  std::lock_guard<std::mutex> lock(researchMutex); researchFrames.clear(); researchLive = nullptr; researchError.clear(); researchLastProgress = researchStarted; return 1;
 }
 KATAEVAL_EXPORT const char* kgrPoll() {
   static std::string copy;
   std::lock_guard<std::mutex> lock(researchMutex);
   nlohmann::json j; j["frames"] = researchFrames; researchFrames.clear();
+  if(!researchLive.is_null()) { j["progress"] = researchLive; researchLive = nullptr; }
   j["done"] = gSearchDone.load();
   if(!researchError.empty()) j["snapshotError"] = researchError;
   copy = j.dump(); return copy.c_str();
@@ -118,5 +136,6 @@ t = b.read_text().replace('EXPORTS="$EXPORTS,_kgeSearchKata', 'EXPORTS="$EXPORTS
 # Optional demo-net bundling must not make an otherwise successful build fail.
 t = t[:t.index('# Bundle the demo nets')]
 t = t.replace('-sASYNCIFY -sALLOW_MEMORY_GROWTH=1', '-sEXCEPTION_STACK_TRACES=1 -sASYNCIFY -sALLOW_MEMORY_GROWTH=1')
+t = t.replace('-sPTHREAD_POOL_SIZE=33', '-sPTHREAD_POOL_SIZE=65')
 b.write_text(t)
 print('Research ABI patched')
