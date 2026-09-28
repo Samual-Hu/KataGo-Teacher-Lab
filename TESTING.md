@@ -34,3 +34,10 @@ NN 行数大于批次数，确认覆盖了多样本批次。Visits 小幅超过 
 性能与数值验证仅针对上述硬件和测试局面；不代表所有设备的显存承载能力或高 Visits 稳定性。
 
 Edge 页面测试：同一文件重复选择、9→19→9 尺寸切换后强制重载均正常；4 线程 128 Visits 预算最终 131 Visits，39.1 秒；无页面异常，IndexedDB 保存完成。截图保存在 `test-results/edge-9x9-fixed.png`（本地忽略）。
+
+
+## 2026-09-28 缓存一致性与 8 线程复测
+
+学校电脑截图显示旧 Edge 页面及新 Chrome 页面配旧 Worker，说明 Pages 的脚本 / WASM 缓存可让同一次部署混用多个版本。页面、Worker、引擎 JS/WASM 和清单现使用同一修订参数；Service Worker 取资源时要求网络重新验证。界面环境徽章显示“修订 b”供核对。
+
+官方 9 路模型在 Intel gen-12lp / Chrome 的两次独立 8 线程搜索均达到 135 Visits（128 上限）；各有 8 个候选着、82 项 Policy、81 项 Ownership、有效 Value/PV，NN 行 / 批次为 135 / 35。第二次使用重新加载的模型，确认实际批量推理。

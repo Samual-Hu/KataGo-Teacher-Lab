@@ -10,6 +10,7 @@ const model=path.resolve(process.env.KATAGO_TEST_MODEL||'.tools/models/kata9x9-b
 const site=path.resolve(process.env.KATAGO_TEST_SITE||'site');
 const channel=process.env.KATAGO_TEST_BROWSER||'chrome';
 const size=Number(process.env.KATAGO_TEST_SIZE||9),visits=Number(process.env.KATAGO_TEST_VISITS||128);
+const desired=(process.env.KATAGO_TEST_THREADS||'1,4,4').split(',').map(Number);
 const modelHash=crypto.createHash('sha256').update(fs.readFileSync(model)).digest('hex');
 const server=http.createServer((req,res)=>{
   res.setHeader('Cross-Origin-Opener-Policy','same-origin');res.setHeader('Cross-Origin-Embedder-Policy','require-corp');
@@ -27,12 +28,12 @@ try {
   const page=await browser.newPage();const logs=[];
   page.on('console',m=>logs.push(m.text()));page.on('pageerror',e=>logs.push(e.stack));
   await page.goto(`http://127.0.0.1:${server.address().port}`);
-  const runs=await page.evaluate(async({size,visits})=>{
+  const runs=await page.evaluate(async({size,visits,desired})=>{
     const {DEFAULTS}=await import('/core.js');const bytes=await(await fetch('/__model')).arrayBuffer();
     const all=[];
     // First worker: one then four threads, then another search on the same evaluator.
     // Second worker: reload the exact same file and search again.
-    for(const threadCounts of [[1,4,4],[4]]) {
+    for(const threadCounts of [desired,[desired.at(-1)]]) {
       const w=new Worker('/engine-worker.js');let teacher;
       const exchange=(request,done)=>new Promise((resolve,reject)=>{
         const messages=[];let failure=null;
@@ -55,7 +56,7 @@ try {
       } finally {w.terminate();}
     }
     return all;
-  },{size,visits});
+  },{size,visits,desired});
   const summary=[];
   for(const run of runs){
     assert.equal(run.teacher.backend,'WebGPU');assert.equal(run.teacher.sha256,modelHash);

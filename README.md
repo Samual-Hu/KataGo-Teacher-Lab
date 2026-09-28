@@ -108,3 +108,6 @@ node scripts/test-gpu.mjs
 ```
 
 需已安装 Chrome；环境变量 `KATAGO_TEST_BROWSER=msedge` 可使用 Edge，`KATAGO_TEST_MODEL` 可指定文件。脚本使用隔离浏览器及 localhost，只读取本地权重，测试单线程→多线程→连续搜索→重新加载；核验 Visits、候选、Policy、Value、PV、Ownership 和真实批量推理。完整证据写入忽略的 `test-results/`。该 9 路权重 SHA-256 为 `a1298ce1adc1dad7bd868ca962b2384cc8388ed373a00e6bae1114fa6f9e2d61`。
+
+
+如 GitHub Pages 页面显示旧版本，请查看顶栏环境徽章的修订标记。2026-09-28 的缓存一致性更新为“修订 b”：HTML、页面脚本、Worker 和引擎二进制使用同一版本参数，Service Worker 重新验证网络资源。`KATAGO_TEST_THREADS=8 node scripts/test-gpu.mjs` 可用官方权重验证 8 线程及重新加载。

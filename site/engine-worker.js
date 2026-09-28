@@ -1,5 +1,6 @@
 // Classic worker: Emscripten pthread runtime itself uses importScripts.
-importScripts('./diagnostics.js');
+const assetVersion=new URL(self.location.href).searchParams.get('v')||'dev';
+importScripts('./diagnostics.js?v='+encodeURIComponent(assetVersion));
 let M, core, size, stopReason=null, running=false, ready=false;
 let phase='worker-start',modelContext=null,searchContext=null;const recentLogs=[];
 let chain=Promise.resolve();
@@ -20,7 +21,7 @@ function call(name,args=[],types=args.map(()=> 'number'),async=false){phase=name
 function check(ok){if(!ok)throw Error(M.ccall('kgeError','string',[],[])||'KataGo 调用失败');}
 function alloc(values){const p=M._malloc(Math.max(4,values.length*4));if(!p)throw Error('WASM 内存不足');M.HEAP32.set(values,p>>2);return p;}
 async function init(req){
-  core=await import('./core.js');size=req.size;
+  core=await import('./core.js?v='+encodeURIComponent(assetVersion));size=req.size;
   modelContext={fileName:req.name,boardSize:size};
   if(!self.crossOriginIsolated)throw Error('未启用跨源隔离，无法运行搜索线程');
   const adapter=await navigator.gpu?.requestAdapter({powerPreference:'high-performance'});if(!adapter)throw Error('未找到 WebGPU 适配器，请使用支持 WebGPU 的 Chrome / Edge');
@@ -35,9 +36,9 @@ async function init(req){
   const reader=decoded.getReader();let header='';while(header.split('\n').length<3&&header.length<4096){const r=await reader.read();if(r.done)break;header+=new TextDecoder().decode(r.value.slice(0,4096));}await reader.cancel();
   const modelName=header.split('\n')[0].trim();
   tell('status',{message:'加载 KataGo WASM 与本地 GPU 权重…'});
-  importScripts('./engine/kataeval-mt.js');
+  importScripts('./engine/kataeval-mt.js?v='+encodeURIComponent(assetVersion));
   phase='createKata';
-  M=await createKata({mainScriptUrlOrBlob:new URL('./engine/kataeval-mt.js',self.location.href).href,locateFile:p=>new URL('./engine/'+p,self.location.href).href,print:()=>{},printErr:log,onAbort:s=>fail(Error('WASM 中止：'+s))});
+  M=await createKata({mainScriptUrlOrBlob:new URL('./engine/kataeval-mt.js?v='+encodeURIComponent(assetVersion),self.location.href).href,locateFile:p=>new URL('./engine/'+p+'?v='+encodeURIComponent(assetVersion),self.location.href).href,print:()=>{},printErr:log,onAbort:s=>fail(Error('WASM 中止：'+s))});
   M.FS.writeFile(modelPath,new Uint8Array(req.bytes));
   check(await call('kgeLoad',[modelPath,size],['string','number'],true));
   // Keep MEMFS bytes: the threaded NNEvaluator opens this path on first evaluation.
