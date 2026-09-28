@@ -89,3 +89,22 @@ IndexedDB 每个快照事务保存完整记录；页面意外关闭留下 `runni
 ## 许可
 
 本项目采用 MIT；KataGo 与 KataGo-WebGPU 的原始许可见 `THIRD_PARTY_LICENSE.txt`。参考 [上游 README](https://github.com/saigo-online/katago-webgpu/blob/d5ad1c0423dba989c60a2f06b1848e7eec2b5941/README.md)、[KataGo analysis 格式](https://github.com/lightvector/KataGo/blob/master/docs/Analysis_Engine.md)。
+
+
+## 2026-09-28：9 路多线程搜索修复
+
+官方 `kata9x9-b18c384nbt-20231025` 在 1 线程正常、4 线程报 `Got nonfinite for policy sum` 的原因，是固定上游版本的 Winograd 权重缓存误用了临时 GPU 缓冲池。批次变化会覆盖持久权重。本项目补丁将这些权重移出缓冲池，保留正常多线程搜索；没有通过降低线程数或伪造输出规避错误。
+
+该官方文件是 modelVersion 12 的嵌套瓶颈卷积网络（nbt），不是 Transformer。Search 与 NNEvaluator 的 9 路初始化经真实搜索验证；更换尺寸会销毁 Worker，重新加载模型。同一个权重文件可以再次选择加载。
+
+异常面板和 Console 现在保留 message、stack（浏览器提供时）、原生 C++ 异常名称、嵌套 cause / ErrorEvent、调用阶段、模型 SHA-256、棋盘尺寸、搜索设置、WASM 内存和近期日志。失败记录也保留诊断。若浏览器跨线程事件不提供 stack，原生异常栈仍输出到 Console，不编造缺失信息。
+
+硬件回归（可选，不在无 GPU 的 CI 中执行）：
+
+```sh
+npm install --prefix .tools/browser-test playwright-core --no-audit --no-fund
+# 将官方权重保存到 .tools/models/kata9x9-b18c384nbt-20231025.bin.gz
+node scripts/test-gpu.mjs
+```
+
+需已安装 Chrome；环境变量 `KATAGO_TEST_BROWSER=msedge` 可使用 Edge，`KATAGO_TEST_MODEL` 可指定文件。脚本使用隔离浏览器及 localhost，只读取本地权重，测试单线程→多线程→连续搜索→重新加载；核验 Visits、候选、Policy、Value、PV、Ownership 和真实批量推理。完整证据写入忽略的 `test-results/`。该 9 路权重 SHA-256 为 `a1298ce1adc1dad7bd868ca962b2384cc8388ed373a00e6bae1114fa6f9e2d61`。

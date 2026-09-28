@@ -27,6 +27,7 @@ s = s[:start] + '''  if(researchSetup.size() == (size_t)(gXLen*gYLen))
 # Each dataset record starts from a fresh search tree. Within a record there is ONE search.
 s = s.replace('if(gBot->getSearch()->getRootNode() != NULL && common == gBotLine.size())', 'if(false)')
 s = s.replace('"kge-search"', '"kgr-research-v1"')
+s = s.replace('Logger logger(nullptr, false, false, false, false)', 'Logger logger(nullptr, false, true, false, false)')
 s = s.replace('static void analyzeCb(const Search* s) noexcept { writeSnapshot(s); }', '''static std::mutex researchMutex;
 static std::vector<nlohmann::json> researchFrames;
 static std::string researchError;
@@ -102,9 +103,20 @@ s = s.replace('params.maxVisits = maxVisits; params.maxPlayouts = maxVisits;', '
   params.chosenMoveTemperature = 0; params.chosenMoveTemperatureEarly = 0;
   params.rootNoiseEnabled = false; params.rootNumSymmetriesToSample = 1;''')
 p.write_text(s)
+# Winograd filters live for the model's lifetime. They must never enter the
+# scratch pool: the next evaluation resets that pool and can overwrite them
+# when a larger batch requests a similarly sized intermediate tensor.
+w = root / 'upstream/cpp/neuralnet/webgpubackend.cpp'
+t = w.read_text()
+old = 'wgpu::Buffer b = wgMakeStorage(ctx, U.data(), U.size(), false);'
+if t.count(old) != 1:
+    raise SystemExit('Unexpected upstream Winograd cache allocation')
+t = t.replace(old, 'wgpu::Buffer b = wgMakeStorage(ctx, U.data(), U.size(), false, /*pooled=*/false);')
+w.write_text(t)
 b = root / 'upstream/scripts/build-eval.sh'
 t = b.read_text().replace('EXPORTS="$EXPORTS,_kgeSearchKata', 'EXPORTS="$EXPORTS,_kgrConfigure,_kgrPoll,_kgrFinish,_kgeSearchKata')
 # Optional demo-net bundling must not make an otherwise successful build fail.
 t = t[:t.index('# Bundle the demo nets')]
+t = t.replace('-sASYNCIFY -sALLOW_MEMORY_GROWTH=1', '-sEXCEPTION_STACK_TRACES=1 -sASYNCIFY -sALLOW_MEMORY_GROWTH=1')
 b.write_text(t)
 print('Research ABI patched')
